@@ -1,15 +1,16 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import CodeEditor from './CodeEditor';
 
 const card = { background: '#171a21', border: '1px solid #262b36', borderRadius: 8, padding: 16, margin: '12px 0' };
 const btn = { background: '#2d6cdf', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', marginRight: 6 };
 const btn2 = { background: '#2b3140', color: '#e6e6e6', border: '1px solid #3a4252', borderRadius: 6, padding: '8px 12px', cursor: 'pointer', marginRight: 6 };
 const input = { width: '100%', padding: 8, margin: '4px 0', boxSizing: 'border-box', background: '#0f1115', color: '#fff', border: '1px solid #262b36', borderRadius: 6, fontFamily: 'inherit' };
-const ta = { ...input, minHeight: 160, fontFamily: 'monospace', whiteSpace: 'pre' };
+const ta = { ...input, minHeight: 70, fontFamily: 'monospace', whiteSpace: 'pre' };
 
 function blankForm() {
-  return { name: '', code: '', cron: '0 8 * * *', vars: '{}', language: 'js', enabled: true, retries: 0, notify: true };
+  return { name: '', language: 'js', cron: '0 8 * * *', vars: '{}', files: [{ name: 'main.js', content: '' }], entry: 'main.js', enabled: true, retries: 0, notify: true };
 }
 
 export default function Dashboard() {
@@ -18,6 +19,8 @@ export default function Dashboard() {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [activeFile, setActiveFile] = useState(0);
+  const [consoleOut, setConsoleOut] = useState(null);
   const [form, setForm] = useState(blankForm());
   const [logs, setLogs] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -39,24 +42,56 @@ export default function Dashboard() {
   function set(field, value) { setForm((f) => ({ ...f, [field]: value })); }
 
   function editScript(s) {
+    const files = (Array.isArray(s.files) && s.files.length)
+      ? s.files.map((f) => ({ name: f.name, content: f.content || '' }))
+      : [{ name: s.language === 'python' ? 'main.py' : 'main.js', content: s.code || '' }];
     setEditing(s);
     setForm({
       name: s.name,
-      code: s.code,
+      language: s.language || 'js',
       cron: s.cron || '0 8 * * *',
       vars: JSON.stringify(s.vars || {}, null, 2),
-      language: s.language || 'js',
+      files,
+      entry: s.entry || files[0].name,
       enabled: s.enabled !== false,
       retries: s.retries || 0,
       notify: s.notify !== false,
     });
+    setActiveFile(0);
+    setConsoleOut(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function setFileContent(v) {
+    setForm((f) => ({ ...f, files: f.files.map((file, idx) => (idx === activeFile ? { ...file, content: v } : file)) }));
+  }
+  function addFile() {
+    const ext = form.language === 'python' ? '.py' : '.js';
+    const name = `file${form.files.length + 1}${ext}`;
+    setForm((f) => ({ ...f, files: [...f.files, { name, content: '' }] }));
+    setActiveFile(form.files.length);
+  }
+  function removeFile(idx) {
+    if (form.files.length <= 1) { setMsg('至少保留一个文件'); return; }
+    const removed = form.files[idx];
+    setForm((f) => {
+      const files = f.files.filter((_, i) => i !== idx);
+      const entry = f.entry === removed.name ? files[0].name : f.entry;
+      return { ...f, files, entry };
+    });
+    setActiveFile(Math.max(0, idx - 1));
+  }
+  function renameActive(v) {
+    const old = form.files[activeFile] ? form.files[activeFile].name : '';
+    setForm((f) => ({ ...f, files: f.files.map((file, idx) => (idx === activeFile ? { ...file, name: v } : file)) }));
+    if (form.entry === old) set('entry', v);
   }
 
   async function save() {
     let varsObj;
     try { varsObj = JSON.parse(form.vars || '{}'); } catch { setMsg('vars 不是合法 JSON'); return; }
-    if (!form.name || !form.code) { setMsg('请填写「脚本名称」和「脚本代码」再添加'); return; }
+    if (!form.name) { setMsg('请填写「脚本名称」再添加'); return; }
+    if (!form.files.some((f) => f.content && f.content.trim())) { setMsg('至少需要一个文件有代码'); return; }
     const payload = { ...form, vars: varsObj };
     if (editing) {
       const r = await fetch('/api/scripts/' + editing.id, {
@@ -68,7 +103,7 @@ export default function Dashboard() {
       const r = await fetch('/api/scripts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      if (r.ok) { setMsg('已添加'); setForm(blankForm()); await load(); }
+      if (r.ok) { setMsg('已添加'); setEditing(null); setForm(blankForm()); setActiveFile(0); await load(); }
       else { const err = await r.json().catch(() => ({})); setMsg('添加失败：' + (err.error || ('HTTP ' + r.status))); }
     }
   }
@@ -77,7 +112,8 @@ export default function Dashboard() {
     setMsg('运行中…');
     const r = await fetch('/api/scripts/' + id + '/run', { method: 'POST' });
     const d = await r.json();
-    setMsg(d.ok ? '运行成功' : '运行失败（见日志）');
+    setConsoleOut(d.logs || (d.ok ? '（无输出）' : '(运行失败，无日志)'));
+    setMsg(d.ok ? '运行成功' : '运行失败（见下方控制台）');
     await load();
   }
 
@@ -106,8 +142,10 @@ export default function Dashboard() {
   const setS = (field, value) => setSettings((s) => ({ ...s, [field]: value }));
   const setSmtp = (field, value) => setSettings((s) => ({ ...s, smtp: { ...(s.smtp || {}), [field]: value } }));
 
+  const af = form.files[activeFile] || form.files[0];
+
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: 20 }}>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>Vercel 任务面板</h2>
         <div>
@@ -123,16 +161,58 @@ export default function Dashboard() {
         <input style={input} placeholder="脚本名称（如 掘金签到）" value={form.name} onChange={(e) => set('name', e.target.value)} />
         <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>脚本语言</div>
         <select style={input} value={form.language} onChange={(e) => set('language', e.target.value)}>
-          <option value="js">JavaScript（Node.js，Vercel 原生支持）</option>
+          <option value="js">JavaScript（Node.js，Vercel 原生支持，多文件可 import）</option>
           <option value="python">Python（仅标准库；Vercel 可能没有 python3）</option>
         </select>
         <input style={input} placeholder="cron 表达式（如 0 8 * * * 每天8点）" value={form.cron} onChange={(e) => set('cron', e.target.value)} />
         <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>
           变量（JSON，会作为环境变量注入脚本，如 {"{"}"COOKIE":"xxx"{"}"}）
         </div>
-        <textarea style={{ ...ta, minHeight: 70 }} value={form.vars} onChange={(e) => set('vars', e.target.value)} />
-        <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>{form.language === 'python' ? '脚本代码（Python 标准库；变量用 os.environ.get("COOKIE") 读取）' : '脚本代码（Node.js，可直接用 fetch / 全局变量）'}</div>
-        <textarea style={ta} value={form.code} onChange={(e) => set('code', e.target.value)} />
+        <textarea style={ta} value={form.vars} onChange={(e) => set('vars', e.target.value)} />
+
+        {/* 多文件标签页 */}
+        <div style={{ fontSize: 13, color: '#9aa4b2', margin: '10px 0 4px' }}>脚本文件（支持多文件，可互相 require/import）</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {form.files.map((f, i) => (
+            <span key={i} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: i === activeFile ? '#2d6cdf' : '#2b3140',
+              color: i === activeFile ? '#fff' : '#e6e6e6',
+              border: '1px solid #3a4252', borderRadius: 6, padding: '4px 8px', fontSize: 12,
+            }}>
+              <button onClick={() => setActiveFile(i)} style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}>{f.name}</button>
+              {form.files.length > 1 && <button onClick={() => removeFile(i)} style={{ background: 'transparent', border: 'none', color: '#ff9b9b', cursor: 'pointer', padding: 0 }}>×</button>}
+            </span>
+          ))}
+          <button style={{ ...btn2, padding: '4px 8px', fontSize: 12 }} onClick={addFile}>＋ 新文件</button>
+        </div>
+
+        {/* 当前文件重命名 + 入口选择 */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#9aa4b2' }}>当前文件：</span>
+          <input style={{ ...input, width: 200 }} value={af ? af.name : ''} onChange={(e) => renameActive(e.target.value)} />
+          <span style={{ fontSize: 12, color: '#9aa4b2' }}>入口文件：</span>
+          <select style={{ ...input, width: 200 }} value={form.entry} onChange={(e) => set('entry', e.target.value)}>
+            {form.files.map((f, i) => <option key={i} value={f.name}>{f.name}</option>)}
+          </select>
+        </div>
+
+        {/* 代码编辑器（CodeMirror） */}
+        <div style={{ marginTop: 8 }}>
+          <CodeEditor value={af ? af.content : ''} language={form.language} onChange={setFileContent} height={300} />
+        </div>
+
+        {/* 运行控制台 */}
+        {consoleOut !== null && (
+          <div style={{ marginTop: 10, border: '1px solid #262b36', borderRadius: 6, background: '#0b0d12' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #262b36' }}>
+              <span style={{ fontSize: 12, color: '#9aa4b2' }}>运行输出（stdout / stderr）</span>
+              <button style={{ ...btn2, padding: '2px 8px', fontSize: 12 }} onClick={() => setConsoleOut(null)}>清空</button>
+            </div>
+            <pre style={{ margin: 0, padding: 10, maxHeight: 240, overflow: 'auto', fontSize: 12, whiteSpace: 'pre-wrap', color: '#d6e0f0' }}>{consoleOut}</pre>
+          </div>
+        )}
+
         <div style={{ marginTop: 8 }}>
           <label style={{ marginRight: 16 }}><input type="checkbox" checked={form.enabled} onChange={(e) => set('enabled', e.target.checked)} /> 启用</label>
           <label style={{ marginRight: 16 }}><input type="checkbox" checked={form.notify} onChange={(e) => set('notify', e.target.checked)} /> 失败/成功通知</label>
@@ -140,7 +220,8 @@ export default function Dashboard() {
         </div>
         <div style={{ marginTop: 10 }}>
           <button style={btn} onClick={save}>{editing ? '保存修改' : '添加脚本'}</button>
-          {editing && <button style={btn2} onClick={() => { setEditing(null); setForm(blankForm()); }}>取消</button>}
+          {editing && <button style={btn} onClick={() => run(editing.id)}>▶ 运行（看输出）</button>}
+          {editing && <button style={btn2} onClick={() => { setEditing(null); setForm(blankForm()); setActiveFile(0); }}>取消</button>}
         </div>
       </div>
 
@@ -152,7 +233,7 @@ export default function Dashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <b>{s.name}</b> {!s.enabled && <span style={{ color: '#ff6b6b' }}>（已停用）</span>}
-              <div style={{ fontSize: 12, color: '#9aa4b2' }}>cron: {s.cron || '（未设置）'} · 上次: {s.lastRun ? new Date(s.lastRun).toLocaleString() : '从未'} · {s.lastStatus === 'success' ? '✅' : s.lastStatus === 'failed' ? '❌' : '—'}</div>
+              <div style={{ fontSize: 12, color: '#9aa4b2' }}>cron: {s.cron || '（未设置）'} · 语言: {s.language || 'js'} · 文件: {(s.files || []).length || 1} · 上次: {s.lastRun ? new Date(s.lastRun).toLocaleString() : '从未'} · {s.lastStatus === 'success' ? '✅' : s.lastStatus === 'failed' ? '❌' : '—'}</div>
             </div>
             <div>
               <button style={btn} onClick={() => run(s.id)}>运行</button>

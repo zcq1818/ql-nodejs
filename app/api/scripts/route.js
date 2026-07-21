@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { storeGet, storeSet } from '@/lib/store';
+import { normalizeFiles, resolveEntry } from '@/lib/scriptModel';
 import crypto from 'crypto';
 
 const KEY = 'panel:scripts';
@@ -11,15 +12,22 @@ export async function GET() {
 
 export async function POST(req) {
   const body = await req.json().catch(() => ({}));
-  if (!body.name || !body.code) {
-    return NextResponse.json({ error: 'name 和 code 必填' }, { status: 400 });
+  if (!body.name) {
+    return NextResponse.json({ error: 'name 必填' }, { status: 400 });
   }
+  const files = normalizeFiles(body);
+  if (files.length === 0 || !files[0].content) {
+    return NextResponse.json({ error: '至少需要一个文件且有代码' }, { status: 400 });
+  }
+  const language = (body.language || 'js').toLowerCase();
+  const entry = resolveEntry(body.entry, files, language);
   const list = await storeGet(KEY, []);
   const script = {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name: body.name,
-    code: body.code,
-    language: (body.language || 'js').toLowerCase(),
+    language,
+    files,
+    entry,
     cron: body.cron || '',
     vars: body.vars || {},
     enabled: body.enabled !== false,

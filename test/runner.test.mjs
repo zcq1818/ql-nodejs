@@ -1,16 +1,24 @@
 // 执行引擎单测：不依赖 HTTP / KV，直接用 node 跑。
 // runner.js 是 ESM 源码，复制为 .mjs 再动态导入（避免 package 非 ESM 时解析失败）。
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'fs';
 import { pathToFileURL } from 'url';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const runnerSrc = readFileSync(path.join(__dirname, '../lib/runner.js'), 'utf8');
-const tmpRunner = path.join(os.tmpdir(), `runner_test_${Date.now()}.mjs`);
-writeFileSync(tmpRunner, runnerSrc);
-const { runScript } = await import(pathToFileURL(tmpRunner).href);
+// runner.js 依赖同目录的 scriptModel.js，一起复制到临时目录并以 .mjs 形式导入
+const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'runner_test_'));
+let runnerSrc = readFileSync(path.join(__dirname, '../lib/runner.js'), 'utf8').replace(
+  "from './scriptModel'",
+  "from './scriptModel.mjs'"
+);
+writeFileSync(path.join(tmpDir, 'runner.mjs'), runnerSrc);
+writeFileSync(
+  path.join(tmpDir, 'scriptModel.mjs'),
+  readFileSync(path.join(__dirname, '../lib/scriptModel.js'), 'utf8')
+);
+const { runScript } = await import(pathToFileURL(path.join(tmpDir, 'runner.mjs')).href);
 
 let failed = 0;
 async function assert(cond, msg) {
