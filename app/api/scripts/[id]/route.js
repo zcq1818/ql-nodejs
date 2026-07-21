@@ -15,7 +15,11 @@ export async function PUT(req, { params }) {
   const i = list.findIndex((x) => x.id === params.id);
   if (i < 0) return NextResponse.json({ error: 'not found' }, { status: 404 });
   list[i] = { ...list[i], ...body, id: params.id };
-  await storeSet(KEY, list);
+  try {
+    await storeSet(KEY, list);
+  } catch (e) {
+    return NextResponse.json({ error: e.message || '存储写入失败' }, { status: 500 });
+  }
   return NextResponse.json(list[i]);
 }
 

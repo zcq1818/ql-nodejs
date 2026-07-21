@@ -55,19 +55,20 @@ export default function Dashboard() {
   async function save() {
     let varsObj;
     try { varsObj = JSON.parse(form.vars || '{}'); } catch { setMsg('vars 不是合法 JSON'); return; }
+    if (!form.name || !form.code) { setMsg('请填写「脚本名称」和「脚本代码」再添加'); return; }
     const payload = { ...form, vars: varsObj };
     if (editing) {
       const r = await fetch('/api/scripts/' + editing.id, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       if (r.ok) { setMsg('已更新'); setEditing(null); setForm(blankForm()); await load(); }
-      else setMsg('更新失败');
+      else { const err = await r.json().catch(() => ({})); setMsg('更新失败：' + (err.error || ('HTTP ' + r.status))); }
     } else {
       const r = await fetch('/api/scripts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       if (r.ok) { setMsg('已添加'); setForm(blankForm()); await load(); }
-      else setMsg('添加失败');
+      else { const err = await r.json().catch(() => ({})); setMsg('添加失败：' + (err.error || ('HTTP ' + r.status))); }
     }
   }
 

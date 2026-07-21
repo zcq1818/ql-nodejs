@@ -29,6 +29,10 @@ export async function POST(req) {
     createdAt: Date.now(),
   };
   list.push(script);
-  await storeSet(KEY, list);
+  try {
+    await storeSet(KEY, list);
+  } catch (e) {
+    return NextResponse.json({ error: e.message || '存储写入失败' }, { status: 500 });
+  }
   return NextResponse.json(script);
 }
