@@ -41,6 +41,17 @@ export default function Dashboard() {
 
   function set(field, value) { setForm((f) => ({ ...f, [field]: value })); }
 
+  // 切换语言时，把文件后缀与入口同步成对应扩展名（解决「Python 入口还是 main.js」）
+  function changeLanguage(lang) {
+    const ext = lang === 'python' ? '.py' : '.js';
+    const re = /\.(js|mjs|cjs|py)$/i;
+    setForm((f) => {
+      const files = f.files.map((file) => (re.test(file.name) ? { ...file, name: file.name.replace(re, ext) } : file));
+      const entry = re.test(f.entry || '') ? f.entry.replace(re, ext) : f.entry;
+      return { ...f, language: lang, files, entry: entry || files[0].name };
+    });
+  }
+
   function editScript(s) {
     const files = (Array.isArray(s.files) && s.files.length)
       ? s.files.map((f) => ({ name: f.name, content: f.content || '' }))
@@ -160,7 +171,7 @@ export default function Dashboard() {
         <h3 style={{ marginTop: 0 }}>{editing ? '编辑脚本：' + editing.name : '添加新脚本'}</h3>
         <input style={input} placeholder="脚本名称（如 掘金签到）" value={form.name} onChange={(e) => set('name', e.target.value)} />
         <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>脚本语言</div>
-        <select style={input} value={form.language} onChange={(e) => set('language', e.target.value)}>
+        <select style={input} value={form.language} onChange={(e) => changeLanguage(e.target.value)}>
           <option value="js">JavaScript（Node.js，Vercel 原生支持，多文件可 import）</option>
           <option value="python">Python（仅标准库；Vercel 可能没有 python3）</option>
         </select>
