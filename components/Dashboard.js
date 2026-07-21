@@ -9,7 +9,7 @@ const input = { width: '100%', padding: 8, margin: '4px 0', boxSizing: 'border-b
 const ta = { ...input, minHeight: 160, fontFamily: 'monospace', whiteSpace: 'pre' };
 
 function blankForm() {
-  return { name: '', code: '', cron: '0 8 * * *', vars: '{}', enabled: true, retries: 0, notify: true };
+  return { name: '', code: '', cron: '0 8 * * *', vars: '{}', language: 'js', enabled: true, retries: 0, notify: true };
 }
 
 export default function Dashboard() {
@@ -45,6 +45,7 @@ export default function Dashboard() {
       code: s.code,
       cron: s.cron || '0 8 * * *',
       vars: JSON.stringify(s.vars || {}, null, 2),
+      language: s.language || 'js',
       enabled: s.enabled !== false,
       retries: s.retries || 0,
       notify: s.notify !== false,
@@ -120,12 +121,17 @@ export default function Dashboard() {
       <div style={card}>
         <h3 style={{ marginTop: 0 }}>{editing ? '编辑脚本：' + editing.name : '添加新脚本'}</h3>
         <input style={input} placeholder="脚本名称（如 掘金签到）" value={form.name} onChange={(e) => set('name', e.target.value)} />
+        <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>脚本语言</div>
+        <select style={input} value={form.language} onChange={(e) => set('language', e.target.value)}>
+          <option value="js">JavaScript（Node.js，Vercel 原生支持）</option>
+          <option value="python">Python（仅标准库；Vercel 可能没有 python3）</option>
+        </select>
         <input style={input} placeholder="cron 表达式（如 0 8 * * * 每天8点）" value={form.cron} onChange={(e) => set('cron', e.target.value)} />
         <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>
           变量（JSON，会作为环境变量注入脚本，如 {"{"}"COOKIE":"xxx"{"}"}）
         </div>
         <textarea style={{ ...ta, minHeight: 70 }} value={form.vars} onChange={(e) => set('vars', e.target.value)} />
-        <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>脚本代码（Node.js，可直接用 fetch / 全局变量）</div>
+        <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>{form.language === 'python' ? '脚本代码（Python 标准库；变量用 os.environ.get("COOKIE") 读取）' : '脚本代码（Node.js，可直接用 fetch / 全局变量）'}</div>
         <textarea style={ta} value={form.code} onChange={(e) => set('code', e.target.value)} />
         <div style={{ marginTop: 8 }}>
           <label style={{ marginRight: 16 }}><input type="checkbox" checked={form.enabled} onChange={(e) => set('enabled', e.target.checked)} /> 启用</label>

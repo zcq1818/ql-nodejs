@@ -19,6 +19,7 @@ export async function POST(req) {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name: body.name,
     code: body.code,
+    language: (body.language || 'js').toLowerCase(),
     cron: body.cron || '',
     vars: body.vars || {},
     enabled: body.enabled !== false,
