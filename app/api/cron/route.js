@@ -6,7 +6,7 @@ import { notifyScript } from '@/lib/notify';
 const KEY = 'panel:scripts';
 export const maxDuration = 60;
 
-// 由 Vercel Cron（每 15 分钟）触发，遍历脚本，到点则执行
+// 由 Vercel Cron（Hobby 计划每天触发一次）触发，遍历脚本，当天未跑过的则执行
 export async function GET() {
   const list = await storeGet(KEY, []);
   const results = [];
@@ -16,7 +16,8 @@ export async function GET() {
     let logs = '';
     const maxAtt = (s.retries || 0) + 1;
     for (let attempt = 0; attempt < maxAtt; attempt++) {
-      const r = await runScript(s, { timeout: 50 });
+      // 单次脚本超时 15s（Hobby 函数时长有限，签到类 API 调用通常几秒完成）
+      const r = await runScript(s, { timeout: 15 });
       logs = r.logs;
       ok = r.ok;
       if (ok) break;
