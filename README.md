@@ -75,3 +75,19 @@ npm run dev                     # http://localhost:3000
 ## 升级提示
 - `next@14.2.5` 有已知安全更新，部署前建议 `npm install next@latest` 升级到补丁版本。
 - `@vercel/kv` 已彻底移除，存储层现为零依赖的 Upstash REST 直连（见 `lib/store.js`）。
+
+## 排障：Vercel 报 "No entrypoint found"（package.json "main"）
+这是**框架识别错误**：Vercel 把项目当成了纯 Node.js 应用，去翻 `package.json` 的 `main`
+入口（`index.js`/`app.js` 等），找不到就报错。本项目是 Next.js，不该走 Node.js 运行时。
+
+**修复（在 Vercel 控制台，不丢已配环境变量）：**
+1. 项目 **Settings → General → Framework Preset** 改成 **Next.js**（关键）。
+2. **Build & Development Settings** 确认：
+   - Build Command：`next build`；Output Directory：`.next`；
+   - Install Command：`npm install`；Root Directory：`./`（仓库根，非子目录）。
+3. **Save** → **Deployments → 最新部署 → Redeploy**。
+
+**备选**：若担心 Vercel 缓存了旧判断，删掉项目重新 **Import** `zcq1818/ql-nodejs`
+（重新导入会自动识别为 Next.js），但环境变量需重填。
+
+> 附：`3 packages are looking for funding` / `npm fund` 只是无害提示，不是错误。
