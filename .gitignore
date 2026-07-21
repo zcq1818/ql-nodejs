@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js build output
+.next/
+out/
+build/
+
+# env / secrets —— 切勿提交真实密钥
+.env
+.env.local
+.env*.local
+
+# runtime logs / temp
+*.log
+npm-debug.log*
+cookies.txt
+
+# os
+.DS_Store
+Thumbs.db
+
+# vercel
+.vercel
+
+# workbuddy internal
+.workbuddy/
