@@ -1,83 +1,107 @@
-// 掘金每日签到（自动从 Cookie 提取 aid/uuid，只需填 COOKIE）
-// 参考 iDerekLi/juejin-helper 的解析思路：aid/uuid 来自 cookie 里的 __tea_cookie_tokens_<aid>
+// 掘金每日签到 —— 解析自 github.com/iDerekLi/juejin-helper（main 分支）
+// 对应源码：packages/juejin-helper/src/growth.ts + utils/parse-cookietokens.ts + workflows/checkin.js
+// 说明：该仓库签到本质是纯 API（check_in 不带 a_bogus），能否成功依赖它额外的
+// 「浏览器访问签到页」预热步骤（MockVisitTask）。本脚本只还原纯 API 部分。
+//
+// 面板 vars 只需：{ "COOKIE": "浏览器复制的 cookie 整串" }
+
 const COOKIE = process.env.COOKIE;
 if (!COOKIE) {
   console.error('缺少 COOKIE 变量');
   process.exit(1);
 }
 
-// 从 cookie 自动提取 aid / uuid（避免写死 uuid=0 导致 check_in 空响应）
-function extractTokens(cookie) {
-  const m = cookie.match(/__tea_cookie_tokens_(\d+)=([^;]+)/);
-  if (m) {
-    const aid = m[1];
-    try {
-      const json = JSON.parse(decodeURIComponent(decodeURIComponent(m[2])));
-      const uuid = json.user_unique_id || '';
-      console.log(`[token] 从 cookie 解析到 aid=${aid}, uuid=${uuid}`);
-      return { aid, uuid };
-    } catch (e) {
-      console.log('[token] __tea_cookie_tokens_ 解析失败，使用默认值');
+// ---- 对应 parse-cookietokens.ts：从 cookie 解析 aid / uuid ----
+function parseCookieTokens(cookie) {
+  const tokensReg = /^__tea_cookie_tokens_(\d+)$/;
+  const stack = {};
+  cookie.split('; ').forEach((pair) => {
+    const idx = pair.indexOf('=');
+    const k = pair.slice(0, idx);
+    const v = pair.slice(idx + 1);
+    stack[k] = v;
+  });
+  for (const key of Object.keys(stack)) {
+    if (tokensReg.test(key)) {
+      const aid = key.match(tokensReg)[1];
+      try {
+        const json = JSON.parse(decodeURIComponent(decodeURIComponent(stack[key])));
+        return { aid, uuid: json.user_unique_id || '' };
+      } catch (e) {
+        return { aid, uuid: '' };
+      }
     }
-  } else {
-    console.log('[token] cookie 中未找到 __tea_cookie_tokens_，使用默认值 aid=2608, uuid=0');
   }
   return { aid: '2608', uuid: '0' };
 }
 
-const { aid: AID, uuid: UUID } = extractTokens(COOKIE);
-const SPIDER = '0';
-const BASE = 'https://api.juejin.cn/growth_api/v1';
-const H = {
-  Cookie: COOKIE,
+const HDR = {
   'User-Agent': 'Mozilla/5.0',
   Referer: 'https://juejin.cn/',
   Origin: 'https://juejin.cn/',
 };
+const { aid: AID, uuid: UUID } = parseCookieTokens(COOKIE);
+console.log(`[token] 解析到 aid=${AID}, uuid=${UUID}`);
 
-async function call(method, path) {
-  const qs = new URLSearchParams({ aid: AID, uuid: UUID, spider: SPIDER }).toString();
-  const r = await fetch(`${BASE}/${path}?${qs}`, {
+const BASE = 'https://api.juejin.cn';
+
+// 对应 growth.ts 的请求拦截器：growth_api 接口自动拼接 aid & uuid
+function withQs(path) {
+  if (path.includes('growth_api')) {
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}aid=${AID}&uuid=${UUID}`;
+  }
+  return path;
+}
+
+async function callApi(path, method = 'GET', body) {
+  const r = await fetch(BASE + withQs(path), {
     method,
-    headers: method === 'POST' ? { ...H, 'Content-Type': 'application/json' } : H,
-    body: method === 'POST' ? JSON.stringify({}) : undefined,
+    headers: { ...HDR, Cookie: COOKIE, 'Content-Type': 'application/json' },
+    body: method === 'POST' ? JSON.stringify(body || {}) : undefined,
   });
   const txt = await r.text();
-  console.log(`[${method} ${path}] HTTP ${r.status} | body=${JSON.stringify(txt)}`);
+  console.log(`[${method} ${path}] HTTP ${r.status} | body=${JSON.stringify(txt).slice(0, 220)}`);
   if (!txt) {
-    console.error('空响应 → 可能是 cookie 失效；若 cookie 有效则 check_in 现在需要 a_bogus 风控签名');
+    console.error('空响应 → 该仓库纯 API 在 check_in 上会因缺少 a_bogus/浏览器预热而失败');
     process.exit(1);
   }
+  let j;
   try {
-    return JSON.parse(txt);
+    j = JSON.parse(txt);
   } catch (e) {
     console.error('响应不是 JSON:', txt);
     process.exit(1);
   }
+  if (j.err_no) {
+    console.error('接口报错:', j.err_msg);
+    process.exit(1);
+  }
+  return j.data;
 }
 
 (async () => {
-  const st = await call('GET', 'get_today_status');
-  if (st.err_no === 0 && st.data && st.data.check_in_done) {
-    console.log('今日已签到，跳过');
-    return;
-  }
-  if (st.err_no !== 0) {
-    console.error('查状态失败:', st.err_msg);
+  try {
+    // 对应 index.ts login：验证登录
+    const user = await callApi('/user_api/v1/user/get', 'GET');
+    console.log(`登录用户: ${user.user_name}`);
+
+    // 对应 GrowthTask.run
+    const todayStatus = await callApi('/growth_api/v1/get_today_status', 'GET');
+    if (todayStatus) {
+      console.log('今日已完成签到');
+    } else {
+      const res = await callApi('/growth_api/v1/check_in', 'POST');
+      console.log(`签到成功 +${res.incr_point} 矿石，当前 ${res.sum_point} 矿石`);
+    }
+
+    const counts = await callApi('/growth_api/v1/get_counts', 'GET');
+    console.log(`连续签到 ${counts.cont_count} 天，累计 ${counts.sum_count} 天`);
+
+    const point = await callApi('/growth_api/v1/get_cur_point', 'GET');
+    console.log(`当前矿石数 ${point}`);
+  } catch (e) {
+    console.error('异常:', e.message);
     process.exit(1);
   }
-
-  const res = await call('POST', 'check_in');
-  if (res.err_no === 0) {
-    console.log('签到成功，当前积分', res.data && res.data.sum_point);
-  } else {
-    console.error('签到失败', res.err_msg);
-    process.exit(1);
-  }
-
-  const ore = await call('GET', 'get_cur_point');
-  if (ore.err_no === 0) console.log('当前矿石', ore.data);
-})().catch((e) => {
-  console.error('异常', e.message);
-  process.exit(1);
-});
+})();
