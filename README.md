@@ -42,7 +42,8 @@ npm run dev                     # http://localhost:3000
 3. 配置存储（持久化脚本/日志）：
    - Vercel KV **已官方弃用**，新项目请用 **Upstash Redis**：
      Vercel Marketplace 搜 Redis → 创建 → 自动注入 `KV_REST_API_URL` / `KV_REST_API_TOKEN`。
-   - 本面板读取的正是这两个变量名（与 `@vercel/kv` 约定一致），Upstash 直接映射即可。
+   - 面板**不再依赖 `@vercel/kv`**，改用原生 `fetch` 直连 Upstash REST 端点，零额外依赖、打包更稳。
+     它读取 `KV_REST_API_URL`/`KV_REST_API_TOKEN`，也兼容 Upstash 原生命名 `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`。
    - 若完全不配置，则会退化为内存存储（**不适合生产**，实例重建数据即丢）。
 4. Cron 频率：默认 `vercel.json` 为 `*/15 * * * *`（每 15 分钟）。
    若你的套餐不允许 sub-hourly 频率，改成 `0 * * * *`（每小时），dispatcher 仍会按脚本
@@ -69,4 +70,4 @@ npm run dev                     # http://localhost:3000
 
 ## 升级提示
 - `next@14.2.5` 有已知安全更新，部署前建议 `npm install next@latest` 升级到补丁版本。
-- `@vercel/kv` 已弃用，新项目按上面说明改用 Upstash Redis 即可（变量名不变）。
+- `@vercel/kv` 已彻底移除，存储层现为零依赖的 Upstash REST 直连（见 `lib/store.js`）。
