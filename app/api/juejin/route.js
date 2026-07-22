@@ -7,6 +7,8 @@ import { notifyScript } from '@/lib/notify';
 import { storeGet, storeAppendList } from '@/lib/store';
 
 export const maxDuration = 60;
+// 强制运行时执行，避免 Next 在构建期把 GET 预渲染成静态结果（否则 Vercel 上手动触发/会被缓存）
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const s = await storeGet('panel:settings', {});

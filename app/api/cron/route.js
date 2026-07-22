@@ -6,6 +6,8 @@ import { notifyScript } from '@/lib/notify';
 import { juejinSignin } from '@/lib/juejinSignin';
 const KEY = 'panel:scripts';
 export const maxDuration = 60;
+// 强制运行时执行，避免 Next 在构建期把 GET 预渲染成静态结果（否则 Vercel 上 cron 可能被缓存）
+export const dynamic = 'force-dynamic';
 
 // 由 Vercel Cron（Hobby 计划每天触发一次）触发，遍历脚本，当天未跑过的则执行
 export async function GET() {

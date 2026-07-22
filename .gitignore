@@ -27,3 +27,6 @@ Thumbs.db
 
 # workbuddy internal
 .workbuddy/
+
+# local rebuild artifacts (Windows jest-worker retries)
+.next*
