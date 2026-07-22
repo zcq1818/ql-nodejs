@@ -268,7 +268,12 @@ export default function Dashboard() {
           <input style={input} placeholder="SMTP_USER" value={settings.smtp?.user || ''} onChange={(e) => setSmtp('user', e.target.value)} />
           <input style={input} type="password" placeholder="SMTP_PASS" value={settings.smtp?.pass || ''} onChange={(e) => setSmtp('pass', e.target.value)} />
           <input style={input} placeholder="接收邮箱 NOTIFY_TO（逗号分隔）" value={settings.notifyTo || ''} onChange={(e) => setS('notifyTo', e.target.value)} />
-          <button style={btn} onClick={saveSettings}>保存设置</button>
+          <div style={{ fontSize: 13, color: '#9aa4b2', margin: '4px 0' }}>掘金签到 Cookie（浏览器复制的 cookie 整串；保存后每日 cron 自动签到+抽奖）</div>
+          <input style={input} type="password" placeholder="JUEJIN_COOKIE" value={settings.juejinCookie || ''} onChange={(e) => setS('juejinCookie', e.target.value)} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button style={btn} onClick={saveSettings}>保存设置</button>
+            <button style={{ ...btn, opacity: 0.85 }} onClick={() => window.open('/api/juejin', '_blank')}>立即测试签到+抽奖</button>
+          </div>
         </div>
       )}
 

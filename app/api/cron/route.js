@@ -36,11 +36,13 @@ export async function GET() {
     results.push({ id: s.id, name: s.name, ok });
   }
 
-  // 浏览器版掘金签到：复用每日唯一的 cron 触发（无需额外 cron 路径，兼容 Hobby），
-  // 仅在设置了 JUEJIN_COOKIE 环境变量时才执行。
-  if (process.env.JUEJIN_COOKIE) {
+  // 浏览器版掘金签到：复用每日唯一的 cron 触发（无需额外 cron 路径，兼容 Hobby）。
+  // cookie 优先读面板设置里的 juejinCookie，其次读 Vercel 环境变量 JUEJIN_COOKIE。
+  const juejinSettings = await storeGet('panel:settings', {});
+  const juejinCookie = juejinSettings.juejinCookie || process.env.JUEJIN_COOKIE;
+  if (juejinCookie) {
     try {
-      const r = await juejinSignin(process.env.JUEJIN_COOKIE, { timeout: 50 });
+      const r = await juejinSignin(juejinCookie, { timeout: 50 });
       await storeAppendList('panel:logs:juejin', {
         time: Date.now(),
         status: r.ok ? 'success' : 'failed',
