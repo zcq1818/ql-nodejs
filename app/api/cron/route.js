@@ -3,6 +3,7 @@ import { storeGet, storeSet, storeAppendList } from '@/lib/store';
 import { runScript } from '@/lib/runner';
 import { shouldRun } from '@/lib/cron';
 import { notifyScript } from '@/lib/notify';
+import { juejinSignin } from '@/lib/juejinSignin';
 const KEY = 'panel:scripts';
 export const maxDuration = 60;
 
@@ -34,5 +35,26 @@ export async function GET() {
     if (s.notify !== false) await notifyScript(s, ok, logs);
     results.push({ id: s.id, name: s.name, ok });
   }
+
+  // 浏览器版掘金签到：复用每日唯一的 cron 触发（无需额外 cron 路径，兼容 Hobby），
+  // 仅在设置了 JUEJIN_COOKIE 环境变量时才执行。
+  if (process.env.JUEJIN_COOKIE) {
+    try {
+      const r = await juejinSignin(process.env.JUEJIN_COOKIE, { timeout: 50 });
+      await storeAppendList('panel:logs:juejin', {
+        time: Date.now(),
+        status: r.ok ? 'success' : 'failed',
+        logs: r.logs.join('\n'),
+        trigger: 'cron',
+      });
+      if (process.env.JUEJIN_NOTIFY !== 'false') {
+        await notifyScript({ name: '掘金签到(浏览器)' }, r.ok, r.logs.join('\n'));
+      }
+      results.push({ id: 'juejin-browser', name: '掘金签到(浏览器)', ok: r.ok });
+    } catch (e) {
+      results.push({ id: 'juejin-browser', name: '掘金签到(浏览器)', ok: false });
+    }
+  }
+
   return NextResponse.json({ ran: results });
 }

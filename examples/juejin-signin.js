@@ -1,9 +1,14 @@
-// 掘金每日签到 —— 解析自 github.com/iDerekLi/juejin-helper（main 分支）
-// 对应源码：packages/juejin-helper/src/growth.ts + utils/parse-cookietokens.ts + workflows/checkin.js
-// 说明：该仓库签到本质是纯 API（check_in 不带 a_bogus），能否成功依赖它额外的
-// 「浏览器访问签到页」预热步骤（MockVisitTask）。本脚本只还原纯 API 部分。
+// 掘金每日签到（纯 API 版，已淘汰）
+// ----------------------------------------------------------------------------
+// ⚠️ 此「纯 API」版在 Vercel / 无浏览器环境下会因 check_in 缺少 a_bogus 风控签名
+// 而返回空响应，无法成功。请改用项目内置的「无头浏览器签到」：
 //
-// 面板 vars 只需：{ "COOKIE": "浏览器复制的 cookie 整串" }
+//   1) 在 Vercel 环境变量设置  JUEJIN_COOKIE = 浏览器复制的 cookie 整串
+//   2) 每日 cron 会自动执行（见 lib/juejinSignin.js + app/api/juejin/route.js）
+//   3) 手动测试：访问 /api/juejin
+//
+// 本文件仅保留作为「纯 API 请求长什么样」的参考，不要再作为定时脚本启用。
+// ----------------------------------------------------------------------------
 
 const COOKIE = process.env.COOKIE;
 if (!COOKIE) {
