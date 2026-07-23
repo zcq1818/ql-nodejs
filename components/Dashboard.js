@@ -140,10 +140,20 @@ export default function Dashboard() {
   }
 
   async function saveSettings() {
-    const r = await fetch('/api/settings', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
-    });
-    if (r.ok) setMsg('设置已保存');
+    setMsg('保存中…');
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setMsg('设置已保存' + (data._warn ? '（⚠️ ' + data._warn + '）' : ''));
+      } else {
+        setMsg('保存失败：' + (data.error || ('HTTP ' + r.status)));
+      }
+    } catch (e) {
+      setMsg('保存失败（网络/解析错误）：' + (e?.message || e));
+    }
   }
 
   function logout() {
