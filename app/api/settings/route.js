@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { storeGet, storeSet, KV_ENABLED } from '@/lib/store';
 const KEY = 'panel:settings';
 
+// 强制运行时执行：否则 Next 在构建期把 GET 预渲染成静态资源，Vercel 上对 PUT/OPTIONS 一律返回 405
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const s = await storeGet(KEY, {});
   return NextResponse.json(s);
