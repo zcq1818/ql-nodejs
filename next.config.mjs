@@ -13,6 +13,14 @@ const nextConfig = {
       '@sparticuz/chromium',
       'chromium-bidi',
     ],
+    // Vercel 用 @vercel/nft 追踪部署文件，只会包含被 require/import 的文件；
+    // @sparticuz/chromium 的 bin/*.br 是运行时用 fs 读取的，不会被追踪，导致线上
+    // 报错「/var/task/node_modules/@sparticuz/chromium/bin 不存在」。这里强制把
+    // 整个 bin 目录打进签到相关路由的部署包，首次调用时解压到 /tmp/chromium 复用。
+    outputFileTracingIncludes: {
+      '/api/juejin': ['./node_modules/@sparticuz/chromium/bin/**'],
+      '/api/cron': ['./node_modules/@sparticuz/chromium/bin/**'],
+    },
   },
 };
 export default nextConfig;
